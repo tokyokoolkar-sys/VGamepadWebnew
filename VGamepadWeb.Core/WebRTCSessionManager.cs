@@ -36,7 +36,7 @@ namespace VGamepadWeb.Core
             }
         }
 
-        public async Task StartConnectionAsync(string connectionId, string sdpOffer, TypeController type, bool enableVib, int sensitivity)
+        public async Task StartConnectionAsync(string connectionId, string sdpOffer, TypeController type, bool enableVib, int sensitivity, string clientId = "")
         {
             var pc = new RTCPeerConnection();
             _peerConnections.TryAdd(connectionId, pc);
@@ -65,7 +65,7 @@ namespace VGamepadWeb.Core
             await pc.setLocalDescription(answer);
 
             OnAnswerReady?.Invoke(connectionId, answer.sdp);
-            _gamepadManager.ConnectNewGamepad(connectionId, type, enableVib, sensitivity);
+            _gamepadManager.ConnectNewGamepad(connectionId, clientId, type, enableVib, sensitivity);
         }
 
         public void AddIceCandidate(string connectionId, string iceCandidateJson)

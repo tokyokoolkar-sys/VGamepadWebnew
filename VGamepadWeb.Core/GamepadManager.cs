@@ -14,8 +14,10 @@ namespace VGamepadWeb.Core
 
     public class GamepadSettings
     {
-        public GamepadSettings(bool enableVibration, int joystickSensitivity, TypeController controllerType, IVirtualGamepad gamepad, int controllerIndex)
+        public GamepadSettings(string connectionId, string clientId, bool enableVibration, int joystickSensitivity, TypeController controllerType, IVirtualGamepad gamepad, int controllerIndex)
         {
+            ConnectionId = connectionId;
+            ClientId = clientId;
             EnableVibration = enableVibration;
             JoystickSensitivity = joystickSensitivity;
             ControllerType = controllerType;
@@ -23,6 +25,8 @@ namespace VGamepadWeb.Core
             ControllerIndex = controllerIndex;
         }
 
+        public string ConnectionId { get; set; }
+        public string ClientId { get; set; } = "";
         public bool EnableVibration { get; set; }
         public int JoystickSensitivity { get; set; }
         public TypeController ControllerType { get; set; }
@@ -71,9 +75,29 @@ namespace VGamepadWeb.Core
             client = new ViGEmClient();
         }
 
-        public void ConnectNewGamepad(string connectionId, TypeController type = TypeController.Xbox360, bool enableVib = true, int sensitivity = 100)
+        public void ConnectNewGamepad(string connectionId, string clientId = "", TypeController type = TypeController.Xbox360, bool enableVib = true, int sensitivity = 100)
         {
             if (_controllers.ContainsKey(connectionId)) return;
+
+            // Reuse an existing virtual gamepad for a reconnecting client (remembered device).
+            if (!string.IsNullOrEmpty(clientId))
+            {
+                var existing = _controllers.FirstOrDefault(kv => kv.Value.ClientId == clientId && kv.Key != connectionId);
+                if (existing.Key != null && _controllers.TryRemove(existing.Key, out var existingSettings))
+                {
+                    existingSettings.ConnectionId = connectionId;
+                    existingSettings.ClientId = clientId;
+                    existingSettings.EnableVibration = enableVib;
+                    existingSettings.JoystickSensitivity = sensitivity;
+                    existingSettings.ControllerType = type;
+                    if (_controllers.TryAdd(connectionId, existingSettings))
+                    {
+                        OnControllerIdAssigned?.Invoke(connectionId, existingSettings.ControllerIndex);
+                        Console.WriteLine($"[Manager] Reused Controller ID: {existingSettings.ControllerIndex} for reconnecting client: {clientId}");
+                        return;
+                    }
+                }
+            }
 
             int assignedIndex = -1;
             lock (_indexLock)
@@ -95,33 +119,35 @@ namespace VGamepadWeb.Core
                 return;
             }
 
-                IVirtualGamepad gamepad;
+            IVirtualGamepad gamepad;
+            GamepadSettings settings = null!;
 
-                if (type == TypeController.DualShock4)
+            if (type == TypeController.DualShock4)
+            {
+                var ds4 = client.CreateDualShock4Controller();
+                ds4.FeedbackReceived += (sender, args) =>
                 {
-                    var ds4 = client.CreateDualShock4Controller();
-                    ds4.FeedbackReceived += (sender, args) =>
-                    {
-                        if (enableVib) OnVibrationReceived?.Invoke(connectionId, args.LargeMotor, args.SmallMotor);
-                    };
-                    ds4.Connect();
-                    gamepad = ds4;
-                }
-                else
+                    if (enableVib && settings != null) OnVibrationReceived?.Invoke(settings.ConnectionId, args.LargeMotor, args.SmallMotor);
+                };
+                ds4.Connect();
+                gamepad = ds4;
+            }
+            else
+            {
+                var x360 = client.CreateXbox360Controller();
+                x360.FeedbackReceived += (sender, args) =>
                 {
-                    var x360 = client.CreateXbox360Controller();
-                    x360.FeedbackReceived += (sender, args) =>
-                    {
-                        if (enableVib) OnVibrationReceived?.Invoke(connectionId, args.LargeMotor, args.SmallMotor);
-                    };
-                    x360.Connect();
-                    gamepad = x360;
-                }
+                    if (enableVib && settings != null) OnVibrationReceived?.Invoke(settings.ConnectionId, args.LargeMotor, args.SmallMotor);
+                };
+                x360.Connect();
+                gamepad = x360;
+            }
 
-                _controllers.TryAdd(connectionId, new GamepadSettings(enableVib, sensitivity, type, gamepad, assignedIndex));
+            settings = new GamepadSettings(connectionId, clientId, enableVib, sensitivity, type, gamepad, assignedIndex);
+            _controllers.TryAdd(connectionId, settings);
 
-                OnControllerIdAssigned?.Invoke(connectionId, assignedIndex);
-                Console.WriteLine($"[Manager] Assigned Controller ID: {assignedIndex} to Player: {connectionId}");
+            OnControllerIdAssigned?.Invoke(connectionId, assignedIndex);
+            Console.WriteLine($"[Manager] Assigned Controller ID: {assignedIndex} to Player: {connectionId} (client: {clientId})");
         }
 
         public void DisconnectGamepad(string connectionId)

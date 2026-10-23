@@ -22,6 +22,17 @@ export const useGamepadConnection = ({
   const dcRef = useRef<RTCDataChannel | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authFailedRef = useRef(false);
+
+  const clientIdRef = useRef<string>('');
+
+  useEffect(() => {
+    if (clientIdRef.current) return;
+    const existing = localStorage.getItem('gamepad_client_id');
+    if (existing) { clientIdRef.current = existing; return; }
+    const id = 'c_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem('gamepad_client_id', id);
+    clientIdRef.current = id;
+  }, []);
   const notifyError = useCallback((msg: string) => {
     if (onError) onError(msg); else console.error(msg);
   }, [onError]);
@@ -69,6 +80,15 @@ export const useGamepadConnection = ({
 
   const connect = useCallback(async () => {
     if (connectingRef.current) return;
+    if (!clientIdRef.current) {
+      const existing = localStorage.getItem('gamepad_client_id');
+      if (existing) clientIdRef.current = existing;
+      else {
+        const id = 'c_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+        localStorage.setItem('gamepad_client_id', id);
+        clientIdRef.current = id;
+      }
+    }
     connectingRef.current = true;
     manualDisconnectRef.current = false;
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
@@ -180,7 +200,7 @@ export const useGamepadConnection = ({
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      await c.invoke('SendOffer', offer.sdp, controllerType, enableVib, sensitivity, serverPassword);
+      await c.invoke('SendOffer', offer.sdp, controllerType, enableVib, sensitivity, serverPassword, clientIdRef.current);
     } catch (err) {
       console.error(err);
       pc.close(); pcRef.current = null;
@@ -192,7 +212,7 @@ export const useGamepadConnection = ({
     } finally {
       connectingRef.current = false;
     }
-  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError]);
+  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError, clientIdRef]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
