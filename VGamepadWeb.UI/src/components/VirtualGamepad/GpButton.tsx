@@ -115,7 +115,7 @@ export const GpButton: React.FC<{
       tabIndex={editMode ? -1 : 0}
       aria-pressed={active}
       aria-label={id}
-      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
       onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave}
       onKeyDown={onKeyDown} onKeyUp={onKeyUp}
       onContextMenu={e => e.preventDefault()}

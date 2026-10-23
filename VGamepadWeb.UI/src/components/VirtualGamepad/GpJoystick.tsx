@@ -147,6 +147,13 @@ export const GpJoystick: React.FC<{
         className={`gp-joy ${showHitboxes ? 'show-hitbox' : ''}`}
         style={{ width: joySize, height: joySize }}
         onTouchStart={onTouchStart}
+        onTouchCancel={() => {
+          if (!editRef.current && stickTouch.current !== null) {
+            stickTouch.current = null;
+            setKnob({ x: 0, y: 0 });
+            onMoveRef.current(0, 0);
+          }
+        }}
         onMouseDown={onMouseDown}
         onContextMenu={e => e.preventDefault()}
       >

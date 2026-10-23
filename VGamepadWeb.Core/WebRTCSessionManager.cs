@@ -18,6 +18,13 @@ namespace VGamepadWeb.Core
         {
             _gamepadManager = gamepadManager;
             _gamepadManager.OnVibrationReceived += HandleVibrationFromGame;
+            _gamepadManager.OnControllerIdAssigned += (connectionId, controllerId) =>
+            {
+                if (_dataChannels.TryGetValue(connectionId, out var dc) && dc.readyState == RTCDataChannelState.open)
+                {
+                    dc.send($"ID:{controllerId}");
+                }
+            };
         }
 
         private void HandleVibrationFromGame(string connectionId, byte largeMotor, byte smallMotor)
