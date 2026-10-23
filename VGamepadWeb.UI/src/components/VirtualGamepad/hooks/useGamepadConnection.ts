@@ -23,7 +23,7 @@ export const useGamepadConnection = ({
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authFailedRef = useRef(false);
   const notifyError = useCallback((msg: string) => {
-    if (onError) onError(msg); else alert(msg);
+    if (onError) onError(msg); else console.error(msg);
   }, [onError]);
   const manualDisconnectRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
