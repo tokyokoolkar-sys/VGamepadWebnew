@@ -91,7 +91,13 @@ const VirtualGamepadInner: React.FC = () => {
   };
 
   // Persist
-  useEffect(() => { localStorage.setItem(`${LAYOUT_KEY}_${activeProfile}_${theme}`, JSON.stringify(layout)); }, [layout, theme, activeProfile]);
+  useEffect(() => {
+    const key = `${LAYOUT_KEY}_${activeProfile}_${theme}`;
+    const handle = window.setTimeout(() => {
+      try { localStorage.setItem(key, JSON.stringify(layout)); } catch { /* ignore quota errors */ }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [layout, theme, activeProfile]);
   useEffect(() => { localStorage.setItem('gamepad_theme', theme); }, [theme]);
   useEffect(() => { localStorage.setItem('gamepad_active_profile', activeProfile); }, [activeProfile]);
   useEffect(() => { localStorage.setItem('gamepad_profiles', JSON.stringify(profiles)); }, [profiles]);
