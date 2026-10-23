@@ -54,8 +54,7 @@ namespace VGamepadWeb.Core
 
                 dc.onmessage += (channel, protocol, data) =>
                 {
-                    string message = Encoding.UTF8.GetString(data);
-                    ProcessFastMessage(connectionId, message, dc);
+                    ProcessFastMessage(connectionId, data, dc);
                 };
             };
 
@@ -77,15 +76,29 @@ namespace VGamepadWeb.Core
             }
         }
 
-        private void ProcessFastMessage(string connectionId, string message, RTCDataChannel dc)
+        private void ProcessFastMessage(string connectionId, byte[] data, RTCDataChannel dc)
         {
-            if (string.IsNullOrWhiteSpace(message)) return;
-
-            var parts = message.Split(':');
-            if (parts.Length == 0) return;
+            if (data == null || data.Length == 0) return;
 
             try
             {
+                // Binary protocol: [0x02][stick: 0=Left,1=Right][x int16 LE][y int16 LE]
+                if (data.Length >= 6 && data[0] == 0x02)
+                {
+                    string stickName = data[1] == 0 ? "Left" : "Right";
+                    short x = BitConverter.ToInt16(data, 2);
+                    short y = BitConverter.ToInt16(data, 4);
+                    _gamepadManager.OnJoystickMove(connectionId, stickName, x, y);
+                    return;
+                }
+
+                // Text protocol fallback (buttons, ping, legacy clients).
+                string message = Encoding.UTF8.GetString(data);
+                if (string.IsNullOrWhiteSpace(message)) return;
+
+                var parts = message.Split(':');
+                if (parts.Length == 0) return;
+
                 if (parts[0] == "Ping")
                 {
                     if (parts.Length >= 2) dc.send($"Pong:{parts[1]}");
@@ -100,7 +113,7 @@ namespace VGamepadWeb.Core
                         _gamepadManager.OnButtonReceive(connectionId, buttonName, parts[2] == "1");
                     }
                 }
-                else if (parts[0] == "J" && parts.Length >= 4) // Joystick move
+                else if (parts[0] == "J" && parts.Length >= 4) // Legacy text joystick
                 {
                     var stickName = parts[1];
                     if (!string.IsNullOrWhiteSpace(stickName)
@@ -113,7 +126,7 @@ namespace VGamepadWeb.Core
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[WebRTC] Failed to process message '{message}': {ex.Message}");
+                Console.WriteLine($"[WebRTC] Failed to process message: {ex.Message}");
             }
         }
 

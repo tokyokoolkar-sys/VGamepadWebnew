@@ -25,6 +25,8 @@ export const useGamepadConnection = ({
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => Promise<void>>(async () => {});
+  const pendingJoyRef = useRef<{ stick: string; x: number; y: number } | null>(null);
+  const joyRafRef = useRef<number | null>(null);
 
   const updateLiveSetting = useCallback((key: string, val: string) => {
     if (connStatus === 'on' && connRef.current?.state === signalR.HubConnectionState.Connected) {
@@ -38,6 +40,7 @@ export const useGamepadConnection = ({
 
   useEffect(() => {
     return () => {
+      if (joyRafRef.current != null) cancelAnimationFrame(joyRafRef.current);
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (pingRef.current) clearInterval(pingRef.current);
       dcRef.current?.close();
@@ -179,6 +182,7 @@ export const useGamepadConnection = ({
 
   const disconnect = async () => {
     manualDisconnectRef.current = true;
+    if (joyRafRef.current != null) { cancelAnimationFrame(joyRafRef.current); joyRafRef.current = null; }
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
     setLatency(null);
@@ -196,12 +200,30 @@ export const useGamepadConnection = ({
     }
   }, []);
 
-  const sendJoystick = useCallback((stick: string, x: number, y: number) => {
+  // Batch joystick updates to one frame to reduce packet rate.
+
+  const flushJoy = useCallback(() => {
+    joyRafRef.current = null;
+    const p = pendingJoyRef.current;
+    pendingJoyRef.current = null;
     const dc = dcRef.current;
-    if (dc?.readyState === 'open') {
-      dc.send(`J:${stick}:${x}:${y}`);
-    }
+    if (!p || dc?.readyState !== 'open') return;
+    // Binary protocol: [0x02][stick: 0=Left,1=Right][x int16 LE][y int16 LE]
+    const buf = new ArrayBuffer(6);
+    const v = new DataView(buf);
+    v.setUint8(0, 0x02);
+    v.setUint8(1, p.stick === 'Left' ? 0 : 1);
+    v.setInt16(2, p.x, true);
+    v.setInt16(4, p.y, true);
+    dc.send(buf);
   }, []);
+
+  const sendJoystick = useCallback((stick: string, x: number, y: number) => {
+    pendingJoyRef.current = { stick, x, y };
+    if (joyRafRef.current == null) {
+      joyRafRef.current = requestAnimationFrame(flushJoy);
+    }
+  }, [flushJoy]);
 
   return { connStatus, latency, controllerId, connect, disconnect, sendButton, sendJoystick };
 };
