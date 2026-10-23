@@ -242,16 +242,15 @@ namespace VGamepadWeb.Core
 
         public void UpdateSettingLive(string connectionId, string settingName, string value)
         {
-            if (_controllers.TryGetValue(connectionId, out var settings))
+            if (!_controllers.TryGetValue(connectionId, out var settings)) return;
+
+            if (settingName == "VibrationEnabled" && bool.TryParse(value, out var vib))
             {
-                if (settingName == "VibrationEnabled")
-                {
-                    settings.EnableVibration = bool.Parse(value);
-                }
-                else if (settingName == "JoystickSensitivity")
-                {
-                    settings.JoystickSensitivity = int.Parse(value);
-                }
+                settings.EnableVibration = vib;
+            }
+            else if (settingName == "JoystickSensitivity" && int.TryParse(value, out var sens))
+            {
+                settings.JoystickSensitivity = Math.Clamp(sens, 1, 1000);
             }
         }
 

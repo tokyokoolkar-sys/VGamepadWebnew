@@ -129,13 +129,14 @@ export const useGamepadConnection = ({
 
     c.on('AuthFailed', (msg: string) => {
       authFailedRef.current = true;
-      alert(`فشل الاتصال: ${msg === 'Invalid server password.' ? 'كلمة المرور غير صحيحة' : msg}`);
+      alert(`Connection failed: ${msg === 'Invalid server password.' ? 'Invalid server password.' : msg}`);
     });
 
     try {
       await c.start();
       connRef.current = c;
-      setConnStatus('on');
+      // WebRTC data channel is not open yet; keep "connecting" until dc.onopen fires.
+      setConnStatus('ing');
 
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);

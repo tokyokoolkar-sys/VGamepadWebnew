@@ -14,10 +14,12 @@ const VirtualGamepadInner: React.FC = () => {
   const { t } = useLanguage();
   const [activeProfile, setActiveProfile] = useState<string>(() => localStorage.getItem('gamepad_active_profile') || 'default');
   const [profiles, setProfiles] = useState<{id: string, name: string}[]>(() => {
-    try { 
+    try {
       const p = localStorage.getItem('gamepad_profiles');
       if (p) return JSON.parse(p);
-    } catch {}
+    } catch (e) {
+      console.warn('Failed to parse profiles', e);
+    }
     return [{ id: 'default', name: 'Default' }];
   });
 
@@ -28,7 +30,16 @@ const VirtualGamepadInner: React.FC = () => {
     return loadLayout(initialTheme, initialProfile);
   });
   
-  const [editMode, setEditMode] = useState(false);
+  const [selectedControl, setSelectedControl] = useState<string | null>(null);
+  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
+  const [editMode, setEditModeState] = useState(false);
+  const setEditMode = useCallback((mode: boolean) => {
+    setEditModeState(mode);
+    if (!mode) {
+      setSelectedControl(null);
+      setVisibilityMenuOpen(false);
+    }
+  }, []);
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [useSameServer, setUseSameServer] = useState<boolean>(() => localStorage.getItem('gamepad_use_same_server') === 'true' || localStorage.getItem('gamepad_use_same_server') === null);
@@ -40,8 +51,6 @@ const VirtualGamepadInner: React.FC = () => {
   const [activeButtons, setActiveButtons] = useState<Set<string>>(new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isBarHidden, setIsBarHidden] = useState(false);
-  const [selectedControl, setSelectedControl] = useState<string | null>(null);
-  const [visibilityMenuOpen, setVisibilityMenuOpen] = useState(false);
   const [showHitboxes, setShowHitboxes] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -52,13 +61,7 @@ const VirtualGamepadInner: React.FC = () => {
     serverUrl: actualServerUrl, serverPassword, controllerType, enableVib, sensitivity
   });
 
-  // Clear selection when exiting edit mode
-  useEffect(() => { 
-    if (!editMode) {
-      setSelectedControl(null);
-      setVisibilityMenuOpen(false);
-    }
-  }, [editMode]);
+  // Selection is cleared inside setEditMode when exiting edit mode.
 
   // Fullscreen support
   useEffect(() => {
@@ -213,7 +216,11 @@ const VirtualGamepadInner: React.FC = () => {
     reader.onload = () => {
       try {
         const p = JSON.parse(reader.result as string);
-        if (p.controls) { setLayout(p); } else { alert(t.invalidFile); }
+        if (p && typeof p === 'object' && p.controls && typeof p.controls === 'object') {
+          setLayout(p as GamepadLayout);
+        } else {
+          alert(t.invalidFile);
+        }
       } catch { alert(t.readFileFailed); }
     };
     reader.readAsText(file);

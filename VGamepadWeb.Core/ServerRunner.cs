@@ -39,10 +39,11 @@ namespace VGamepadWeb.Core
             {
                 options.AddDefaultPolicy(policy =>
                 {
+                    // Do not echo arbitrary origins with credentials; keep permissive
+                    // for local-network clients but without credential-bearing responses.
                     policy.AllowAnyHeader()
                           .AllowAnyMethod()
-                          .SetIsOriginAllowed(_ => true)
-                          .AllowCredentials();
+                          .SetIsOriginAllowed(_ => true);
                 });
             });
 
