@@ -21,6 +21,10 @@ export const useGamepadConnection = ({
   const dcRef = useRef<RTCDataChannel | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authFailedRef = useRef(false);
+  const manualDisconnectRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const connectRef = useRef<() => Promise<void>>(async () => {});
 
   const updateLiveSetting = useCallback((key: string, val: string) => {
     if (connStatus === 'on' && connRef.current?.state === signalR.HubConnectionState.Connected) {
@@ -34,6 +38,7 @@ export const useGamepadConnection = ({
 
   useEffect(() => {
     return () => {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       if (pingRef.current) clearInterval(pingRef.current);
       dcRef.current?.close();
       pcRef.current?.close();
@@ -41,7 +46,22 @@ export const useGamepadConnection = ({
     };
   }, []);
 
-  const connect = async () => {
+  const scheduleReconnect = useCallback(() => {
+    if (manualDisconnectRef.current) return;
+    if (reconnectTimerRef.current) return;
+    if (reconnectAttemptsRef.current >= 3) return;
+    reconnectAttemptsRef.current += 1;
+    const delay = 1000 * reconnectAttemptsRef.current;
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectRef.current?.();
+    }, delay);
+  }, []);
+
+  const connect = useCallback(async () => {
+    manualDisconnectRef.current = false;
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+    reconnectAttemptsRef.current = 0;
     if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
     if (dcRef.current) { dcRef.current.close(); dcRef.current = null; }
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
@@ -59,6 +79,7 @@ export const useGamepadConnection = ({
       .build();
     c.onclose(() => {
       if (dcRef.current?.readyState !== 'open') setConnStatus('off');
+      scheduleReconnect();
     });
 
     const pc = new RTCPeerConnection();
@@ -69,6 +90,7 @@ export const useGamepadConnection = ({
 
     dc.onopen = () => {
       console.log('[WebRTC] Data Channel opened — ready to send gamepad data!');
+      reconnectAttemptsRef.current = 0;
       setConnStatus('on');
       pingRef.current = setInterval(() => {
         if (dcRef.current?.readyState === 'open') {
@@ -82,6 +104,7 @@ export const useGamepadConnection = ({
       setLatency(null);
       setControllerId(null);
       setConnStatus('off');
+      scheduleReconnect();
     };
     dc.onmessage = (event) => {
       const msg = typeof event.data === 'string' ? event.data : '';
@@ -147,12 +170,16 @@ export const useGamepadConnection = ({
       dc.close(); dcRef.current = null;
       setConnStatus('off');
       if (!authFailedRef.current) {
-        alert('فشل الاتصال: ' + err);
+        alert('Connection failed: ' + err);
       }
     }
-  };
+  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect]);
+
+  useEffect(() => { connectRef.current = connect; }, [connect]);
 
   const disconnect = async () => {
+    manualDisconnectRef.current = true;
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
     setLatency(null);
     setControllerId(null);

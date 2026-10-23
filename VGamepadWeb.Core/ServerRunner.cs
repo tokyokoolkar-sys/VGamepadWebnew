@@ -62,6 +62,9 @@ namespace VGamepadWeb.Core
             // خريطة الـ Hub الخاص بالـ SignalR
             _app.MapHub<GamepadHub>("/gamepadhub");
 
+            // Simple health endpoint for monitoring/load balancers.
+            _app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
+
             // 🔥 3. حماية مسارات الـ React لضمان إعادة توجيه أي مسار عشوائي إلى صفحة الـ index.html لتجنب خطأ 404
             _app.MapFallbackToFile("index.html");
 
