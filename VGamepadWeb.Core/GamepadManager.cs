@@ -28,6 +28,8 @@ namespace VGamepadWeb.Core
         public TypeController ControllerType { get; set; }
         public IVirtualGamepad Gamepad { get; set; }
         public int ControllerIndex { get; set; }
+        // Bitmask for DS4 D-pad directions: 1=Up,2=Down,4=Left,8=Right
+        public int DpadMask { get; set; }
     }
 
     public class GamepadManager : IDisposable
@@ -163,11 +165,23 @@ namespace VGamepadWeb.Core
                     else if (buttonName == "RT") ds4.SetSliderValue(DualShock4Slider.RightTrigger, (byte)(isPressed ? 255 : 0));
                     else if (buttonName == "Up" || buttonName == "Down" || buttonName == "Left" || buttonName == "Right")
                     {
-                        if (!isPressed) ds4.SetDPadDirection(DualShock4DPadDirection.None);
-                        else if (buttonName == "Up") ds4.SetDPadDirection(DualShock4DPadDirection.North);
-                        else if (buttonName == "Down") ds4.SetDPadDirection(DualShock4DPadDirection.South);
-                        else if (buttonName == "Left") ds4.SetDPadDirection(DualShock4DPadDirection.West);
-                        else if (buttonName == "Right") ds4.SetDPadDirection(DualShock4DPadDirection.East);
+                        int bit = buttonName == "Up" ? 1 : buttonName == "Down" ? 2 : buttonName == "Left" ? 4 : 8;
+                        if (isPressed) settings.DpadMask |= bit; else settings.DpadMask &= ~bit;
+
+                        DualShock4DPadDirection dir = DualShock4DPadDirection.None;
+                        bool up = (settings.DpadMask & 1) != 0;
+                        bool down = (settings.DpadMask & 2) != 0;
+                        bool left = (settings.DpadMask & 4) != 0;
+                        bool right = (settings.DpadMask & 8) != 0;
+                        if (up && right) dir = DualShock4DPadDirection.Northeast;
+                        else if (up && left) dir = DualShock4DPadDirection.Northwest;
+                        else if (down && right) dir = DualShock4DPadDirection.Southeast;
+                        else if (down && left) dir = DualShock4DPadDirection.Southwest;
+                        else if (up) dir = DualShock4DPadDirection.North;
+                        else if (down) dir = DualShock4DPadDirection.South;
+                        else if (left) dir = DualShock4DPadDirection.West;
+                        else if (right) dir = DualShock4DPadDirection.East;
+                        ds4.SetDPadDirection(dir);
                     }
                     else if (_buttonMapDualShock4.TryGetValue(buttonName, out var button))
                     {
