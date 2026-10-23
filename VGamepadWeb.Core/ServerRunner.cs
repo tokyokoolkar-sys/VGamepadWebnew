@@ -17,8 +17,31 @@ namespace VGamepadWeb.Core
         public WebRTCSessionManager? WebRTCSessionManager => _app?.Services.GetRequiredService<WebRTCSessionManager>();
 
         // 🔥 تم تحديث الدالة لتقبل البورت وكلمة المرور وتشغيل الـ React على نفس السيرفر
+        private int _port = 5000;
+
+        private static string GetPreferredIp()
+        {
+            var candidates = new List<string>();
+            foreach (var ni in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+                foreach (var ip in ni.GetIPProperties().UnicastAddresses)
+                {
+                    if (ip.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ip.Address))
+                    {
+                        candidates.Add(ip.Address.ToString());
+                    }
+                }
+            }
+            // Prefer hotspot subnet, then private LAN ranges.
+            foreach (var c in candidates) if (c.StartsWith("192.168.137.")) return c;
+            foreach (var c in candidates) if (c.StartsWith("192.168.") || c.StartsWith("10.") || c.StartsWith("172.")) return c;
+            return candidates.Count > 0 ? candidates[0] : "127.0.0.1";
+        }
+
         public async Task StartServerAsync(int port = 5000, string password = "")
         {
+            _port = port;
             // تعيين كلمة المرور في الـ Hub فوراً قبل بدء تشغيل السيرفر لتأمين القنوات مباشرة
             GamepadHub.SetPassword(password);
 
@@ -77,6 +100,9 @@ namespace VGamepadWeb.Core
 
             // Simple health endpoint for monitoring/load balancers.
             _app.MapGet("/health", () => Results.Ok(new { status = "ok", time = DateTime.UtcNow }));
+
+            // Server info endpoint used by the UI to build a phone-friendly URL/QR.
+            _app.MapGet("/api/info", () => Results.Ok(new { ip = GetPreferredIp(), port = _port, url = $"http://{GetPreferredIp()}:{_port}" }));
 
             // 🔥 3. حماية مسارات الـ React لضمان إعادة توجيه أي مسار عشوائي إلى صفحة الـ index.html لتجنب خطأ 404
             _app.MapFallbackToFile("index.html");

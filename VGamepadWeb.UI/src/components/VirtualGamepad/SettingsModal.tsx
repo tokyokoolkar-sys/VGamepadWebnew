@@ -36,6 +36,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useSameServer, setUseSameServer, serverUrl, setServerUrl, serverPassword, setServerPassword, connStatus, connect, disconnect
 }) => {
   const { t } = useLanguage();
+  const [qrValue, setQrValue] = React.useState<string>(serverUrl || window.location.origin);
+
+  React.useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    const base = (serverUrl || window.location.origin).replace(/\/$/, '');
+    fetch(base + '/api/info')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled && data?.url) setQrValue(data.url); })
+      .catch(() => { if (!cancelled) setQrValue(serverUrl || window.location.origin); });
+    return () => { cancelled = true; };
+  }, [settingsOpen, serverUrl]);
 
   if (!settingsOpen) return null;
 
@@ -139,7 +151,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </>
         )}
         <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
-          <QRCodeImage value={serverUrl || window.location.origin} />
+          <QRCodeImage value={qrValue} />
         </div>
         <div className="gp-modal-btns">
           {connStatus === 'on' ? (

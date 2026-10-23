@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using QRCoder;
 using VGamepadWeb.Core;
 
 namespace VGamepadWeb.WinForm
@@ -9,6 +10,7 @@ namespace VGamepadWeb.WinForm
     {
         ServerRunner server = new ServerRunner();
         ServerState _CurrentState = ServerState.Stopped;
+        PictureBox pictureBoxQR = null!;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public ServerState CurrentState
@@ -36,6 +38,18 @@ namespace VGamepadWeb.WinForm
             string hotspotIp = NetworkHelper.GetHotspotIPv4Address();
             string hotspotText = string.IsNullOrEmpty(hotspotIp) ? "" : $" | Hotspot IP: {hotspotIp}";
             label_ips.Text = "Local IPs: " + string.Join(", ", NetworkHelper.GetAllLocalIPv4Addresses()) + hotspotText;
+
+            // QR code picture box for easy phone connection.
+            pictureBoxQR = new PictureBox
+            {
+                Size = new Size(160, 160),
+                Location = new Point(620, 200),
+                SizeMode = PictureBoxSizeMode.StretchImage,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.White
+            };
+            Controls.Add(pictureBoxQR);
+            pictureBoxQR.BringToFront();
             labelVersion.Text = $"Version: {Application.ProductVersion.Split("+")[0]}";
 
             // Auto-start the server on launch for convenience.
@@ -125,6 +139,19 @@ namespace VGamepadWeb.WinForm
                     // تشغيل السيرفر وبناء الـ WebApplication داخلياً
                     await server.StartServerAsync(port);
 
+                    // Generate QR code for the server URL.
+                    try
+                    {
+                        string ip = NetworkHelper.GetPreferredLocalIPv4Address();
+                        string url = $"http://{ip}:{port}";
+                        using var qrGenerator = new QRCodeGenerator();
+                        using var qrData = qrGenerator.CreateQrCode(url, QRCodeGenerator.ECCLevel.Q);
+                        using var qrCode = new QRCode(qrData);
+                        using var bmp = qrCode.GetGraphic(8);
+                        pictureBoxQR.Image = new Bitmap(bmp);
+                    }
+                    catch { }
+
                     CurrentState = ServerState.Running;
                 }
                 catch (Exception ex)
@@ -141,6 +168,7 @@ namespace VGamepadWeb.WinForm
                 await server.StopServerAsync();
 
                 labelIP.Text = "[ x.x.x.x:x ]";
+                if (pictureBoxQR != null) pictureBoxQR.Image = null;
 
                 // تنظيف الشاشة من أي كروت متبقية فور إيقاف السيرفر
                 flowLayoutPanelPlayers.Controls.Clear();
