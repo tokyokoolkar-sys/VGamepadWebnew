@@ -28,12 +28,22 @@ namespace VGamepadWeb.Core
             builder.Services.AddSingleton<GamepadManager>();
             builder.Services.AddSingleton<WebRTCSessionManager>();
 
-            // تفعيل الكشف الديناميكي عن مجلد wwwroot المرفق مع الـ WinForm
+            // Resolve the wwwroot folder robustly across host apps (WinForm/Console).
             string wwwrootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+            if (!Directory.Exists(wwwrootPath))
+            {
+                var dir = new DirectoryInfo(AppContext.BaseDirectory);
+                while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "wwwroot")))
+                {
+                    dir = dir.Parent;
+                }
+                if (dir != null) wwwrootPath = Path.Combine(dir.FullName, "wwwroot");
+            }
             if (Directory.Exists(wwwrootPath))
             {
                 builder.Environment.WebRootPath = wwwrootPath;
             }
+
 
             builder.Services.AddCors(options =>
             {
@@ -53,11 +63,14 @@ namespace VGamepadWeb.Core
 
             _app.UseCors();
 
-            // 🔥 1. البحث التلقائي عن الملفات الافتراضية مثل index.html عند الدخول للرابط الأساسي
-            _app.UseDefaultFiles();
-
-            // 🔥 2. تخديم ملفات الـ React (JS, CSS, Images) المتواجدة في wwwroot
-            _app.UseStaticFiles();
+            if (Directory.Exists(wwwrootPath))
+            {
+                var fileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(wwwrootPath);
+                _app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
+                _app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
+                // Explicit root handler guarantees "/" serves the SPA entry point.
+                _app.MapGet("/", () => Results.File(Path.Combine(wwwrootPath, "index.html"), "text/html"));
+            }
 
             // خريطة الـ Hub الخاص بالـ SignalR
             _app.MapHub<GamepadHub>("/gamepadhub");

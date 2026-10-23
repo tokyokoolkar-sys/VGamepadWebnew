@@ -35,6 +35,15 @@ namespace VGamepadWeb.WinForm
 
             label_ips.Text = "Local IPs: " + string.Join(", ", NetworkHelper.GetAllLocalIPv4Addresses());
             labelVersion.Text = $"Version: {Application.ProductVersion.Split("+")[0]}";
+
+            // Auto-start the server on launch for convenience.
+            this.Shown += (s, e) =>
+            {
+                if (CurrentState == ServerState.Stopped)
+                {
+                    try { button_Server_Click(this, EventArgs.Empty); } catch { }
+                }
+            };
         }
 
         public enum ServerState
