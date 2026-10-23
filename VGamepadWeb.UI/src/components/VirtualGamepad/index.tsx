@@ -53,12 +53,47 @@ const VirtualGamepadInner: React.FC = () => {
   const [isBarHidden, setIsBarHidden] = useState(false);
   const [showHitboxes, setShowHitboxes] = useState(false);
 
+  const [dialog, setDialog] = useState<null | {
+    kind: 'alert' | 'confirm' | 'prompt';
+    message: string;
+    input: string;
+    onConfirm: (value?: string) => void;
+    onCancel?: () => void;
+  }>(null);
+
+  const showAlert = useCallback((message: string) => {
+    return new Promise<void>(resolve => {
+      setDialog({ kind: 'alert', message, input: '', onConfirm: () => { setDialog(null); resolve(); } });
+    });
+  }, []);
+
+  const showConfirm = useCallback((message: string) => {
+    return new Promise<boolean>(resolve => {
+      setDialog({
+        kind: 'confirm', message, input: '',
+        onConfirm: () => { setDialog(null); resolve(true); },
+        onCancel: () => { setDialog(null); resolve(false); },
+      });
+    });
+  }, []);
+
+  const showPrompt = useCallback((message: string) => {
+    return new Promise<string | null>(resolve => {
+      setDialog({
+        kind: 'prompt', message, input: '',
+        onConfirm: (value) => { setDialog(null); resolve(value ?? null); },
+        onCancel: () => { setDialog(null); resolve(null); },
+      });
+    });
+  }, []);
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const actualServerUrl = useSameServer ? window.location.origin : serverUrl;
   const { connStatus, latency, controllerId, connect, disconnect, sendButton, sendJoystick } = useGamepadConnection({
-    serverUrl: actualServerUrl, serverPassword, controllerType, enableVib, sensitivity
+    serverUrl: actualServerUrl, serverPassword, controllerType, enableVib, sensitivity,
+    onError: (msg) => { showAlert(msg); },
   });
 
   // Selection is cleared inside setEditMode when exiting edit mode.
@@ -113,8 +148,8 @@ const VirtualGamepadInner: React.FC = () => {
     setLayout(loadLayout(theme, profileId));
   }, [theme]);
 
-  const createNewProfile = () => {
-    const name = prompt(t.newProfilePrompt);
+  const createNewProfile = async () => {
+    const name = await showPrompt(t.newProfilePrompt);
     if (name && name.trim()) {
       const newId = 'p_' + Date.now();
       setProfiles(prev => [...prev, { id: newId, name: name.trim() }]);
@@ -123,9 +158,9 @@ const VirtualGamepadInner: React.FC = () => {
     }
   };
 
-  const deleteProfile = (profileId: string) => {
-    if (profiles.length <= 1) return alert(t.cannotDeleteOnly);
-    if (window.confirm(t.confirmDeleteProfile)) {
+  const deleteProfile = async (profileId: string) => {
+    if (profiles.length <= 1) { await showAlert(t.cannotDeleteOnly); return; }
+    if (await showConfirm(t.confirmDeleteProfile)) {
       const newProfiles = profiles.filter(p => p.id !== profileId);
       setProfiles(newProfiles);
       if (activeProfile === profileId) {
@@ -133,7 +168,7 @@ const VirtualGamepadInner: React.FC = () => {
         setActiveProfile(fallback);
         setLayout(loadLayout(theme, fallback));
       }
-      Object.keys(THEMES).forEach(t => localStorage.removeItem(`${LAYOUT_KEY}_${profileId}_${t}`));
+      Object.keys(THEMES).forEach(themeKey => localStorage.removeItem(`${LAYOUT_KEY}_${profileId}_${themeKey}`));
     }
   };
 
@@ -225,9 +260,9 @@ const VirtualGamepadInner: React.FC = () => {
         if (p && typeof p === 'object' && p.controls && typeof p.controls === 'object') {
           setLayout(p as GamepadLayout);
         } else {
-          alert(t.invalidFile);
+          showAlert(t.invalidFile);
         }
-      } catch { alert(t.readFileFailed); }
+      } catch { showAlert(t.readFileFailed); }
     };
     reader.readAsText(file);
     e.target.value = '';
@@ -315,6 +350,34 @@ const VirtualGamepadInner: React.FC = () => {
           resetControl={resetControl} setSelectedControl={setSelectedControl}
         />
       </div>
+
+      {dialog && (
+        <div className="gp-overlay" onClick={() => { dialog.onCancel?.(); }}>
+          <div className="gp-modal" onClick={e => e.stopPropagation()}>
+            <p style={{ marginBottom: '12px' }}>{dialog.message}</p>
+            {dialog.kind === 'prompt' && (
+              <input
+                className="gp-input"
+                value={dialog.input}
+                onChange={e => setDialog({ ...dialog, input: e.target.value })}
+                autoFocus
+                style={{ marginBottom: '12px' }}
+              />
+            )}
+            <div className="gp-modal-btns">
+              {dialog.kind !== 'alert' && (
+                <button className="gp-mbtn" onClick={() => dialog.onCancel?.()}>{t.close}</button>
+              )}
+              <button
+                className="gp-mbtn green"
+                onClick={() => dialog.onConfirm(dialog.kind === 'prompt' ? dialog.input : undefined)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

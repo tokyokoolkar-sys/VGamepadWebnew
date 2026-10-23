@@ -7,10 +7,11 @@ interface UseGamepadConnectionProps {
   controllerType: number;
   enableVib: boolean;
   sensitivity: number;
+  onError?: (message: string) => void;
 }
 
 export const useGamepadConnection = ({
-  serverUrl, serverPassword = '', controllerType, enableVib, sensitivity
+  serverUrl, serverPassword = '', controllerType, enableVib, sensitivity, onError
 }: UseGamepadConnectionProps) => {
   const [connStatus, setConnStatus] = useState<'off' | 'ing' | 'on'>('off');
   const [latency, setLatency] = useState<number | null>(null);
@@ -21,6 +22,9 @@ export const useGamepadConnection = ({
   const dcRef = useRef<RTCDataChannel | null>(null);
   const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authFailedRef = useRef(false);
+  const notifyError = useCallback((msg: string) => {
+    if (onError) onError(msg); else alert(msg);
+  }, [onError]);
   const manualDisconnectRef = useRef(false);
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -156,7 +160,7 @@ export const useGamepadConnection = ({
 
     c.on('AuthFailed', (msg: string) => {
       authFailedRef.current = true;
-      alert(`Connection failed: ${msg === 'Invalid server password.' ? 'Invalid server password.' : msg}`);
+      notifyError(`Connection failed: ${msg === 'Invalid server password.' ? 'Invalid server password.' : msg}`);
     });
 
     try {
@@ -174,10 +178,10 @@ export const useGamepadConnection = ({
       dc.close(); dcRef.current = null;
       setConnStatus('off');
       if (!authFailedRef.current) {
-        alert('Connection failed: ' + err);
+        notifyError('Connection failed: ' + err);
       }
     }
-  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect]);
+  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
