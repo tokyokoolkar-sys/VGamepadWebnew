@@ -71,26 +71,27 @@ namespace VGamepadWeb.Core
 
         public void ConnectNewGamepad(string connectionId, TypeController type = TypeController.Xbox360, bool enableVib = true, int sensitivity = 100)
         {
-            if (!_controllers.ContainsKey(connectionId))
+            if (_controllers.ContainsKey(connectionId)) return;
+
+            int assignedIndex = -1;
+            lock (_indexLock)
             {
-                int assignedIndex = -1;
-                lock (_indexLock)
+                for (int i = 0; i < _availableIndexes.Length; i++)
                 {
-                    for (int i = 0; i < _availableIndexes.Length; i++)
+                    if (_availableIndexes[i])
                     {
-                        if (_availableIndexes[i])
-                        {
-                            _availableIndexes[i] = false;
-                            assignedIndex = i; // حجز الرقم من 0 إلى 3 مباشرة
-                            break;
-                        }
+                        _availableIndexes[i] = false;
+                        assignedIndex = i;
+                        break;
                     }
                 }
+            }
 
-                if (assignedIndex == -1)
-                {
-                    assignedIndex = _controllers.Count;
-                }
+            if (assignedIndex == -1)
+            {
+                Console.WriteLine($"[Manager] All controller slots in use; rejected player: {connectionId}");
+                return;
+            }
 
                 IVirtualGamepad gamepad;
 
@@ -119,7 +120,6 @@ namespace VGamepadWeb.Core
 
                 OnControllerIdAssigned?.Invoke(connectionId, assignedIndex);
                 Console.WriteLine($"[Manager] Assigned Controller ID: {assignedIndex} to Player: {connectionId}");
-            }
         }
 
         public void DisconnectGamepad(string connectionId)
@@ -182,6 +182,14 @@ namespace VGamepadWeb.Core
         {
             if (_controllers.TryGetValue(connectionId, out var settings))
             {
+                // Apply configured joystick sensitivity (100 = no scaling).
+                int sens = Math.Clamp(settings.JoystickSensitivity, 1, 1000);
+                if (sens != 100)
+                {
+                    xValue = (short)Math.Clamp((int)xValue * sens / 100, short.MinValue, short.MaxValue);
+                    yValue = (short)Math.Clamp((int)yValue * sens / 100, short.MinValue, short.MaxValue);
+                }
+
                 if (settings.ControllerType == TypeController.Xbox360)
                 {
                     var x360 = (IXbox360Controller)settings.Gamepad;
