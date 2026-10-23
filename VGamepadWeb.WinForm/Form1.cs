@@ -33,7 +33,9 @@ namespace VGamepadWeb.WinForm
             server.OnControllerIdAssigned += HandlePlayerConnected;
             server.OnPlayerDisconnected += HandlePlayerDisconnected;
 
-            label_ips.Text = "Local IPs: " + string.Join(", ", NetworkHelper.GetAllLocalIPv4Addresses());
+            string hotspotIp = NetworkHelper.GetHotspotIPv4Address();
+            string hotspotText = string.IsNullOrEmpty(hotspotIp) ? "" : $" | Hotspot IP: {hotspotIp}";
+            label_ips.Text = "Local IPs: " + string.Join(", ", NetworkHelper.GetAllLocalIPv4Addresses()) + hotspotText;
             labelVersion.Text = $"Version: {Application.ProductVersion.Split("+")[0]}";
 
             // Auto-start the server on launch for convenience.

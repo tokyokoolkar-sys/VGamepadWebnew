@@ -48,17 +48,43 @@ namespace VGamepadWeb.WinForm
         /// <summary>
         /// 2. جلب عنوان الـ IPv4 المرجح والأكثر ملاءمة فقط (الـ Wi-Fi أولاً، ثم بقية الكروت، أو 127.0.0.1 كاحتياطي)
         /// </summary>
+        public static string GetHotspotIPv4Address()
+        {
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                string desc = ni.Description ?? "";
+                string name = ni.Name ?? "";
+                bool isHotspot = desc.Contains("Wi-Fi Direct Virtual", StringComparison.OrdinalIgnoreCase)
+                    || desc.Contains("Microsoft Wi-Fi Direct", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("Local Area Connection*", StringComparison.OrdinalIgnoreCase)
+                    || desc.Contains("Hotspot", StringComparison.OrdinalIgnoreCase);
+                if (!isHotspot) continue;
+                foreach (var ip in ni.GetIPProperties().UnicastAddresses)
+                {
+                    if (ip.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip.Address))
+                    {
+                        return ip.Address.ToString();
+                    }
+                }
+            }
+            foreach (var ipStr in GetAllLocalIPv4Addresses())
+            {
+                if (ipStr.StartsWith("192.168.137.")) return ipStr;
+            }
+            return "";
+        }
+
         public static string GetPreferredLocalIPv4Address()
         {
-            // نعتمد مباشرة على الدالة الأولى ونأخذ أول عنصر منها إن وجد
-            var allIPs = GetAllLocalIPv4Addresses();
+            string hotspot = GetHotspotIPv4Address();
+            if (!string.IsNullOrEmpty(hotspot)) return hotspot;
 
+            var allIPs = GetAllLocalIPv4Addresses();
             if (allIPs != null && allIPs.Count > 0)
             {
-                return allIPs[0]; // إرجاع العنصر الأول (وهو الـ Wi-Fi المرجح بفضل الترتيب)
+                return allIPs[0];
             }
-
-            // خيار احتياطي آمن في حال عدم وجود أي اتصال شبكة فعال في الجهاز
             return "127.0.0.1";
         }
     }
