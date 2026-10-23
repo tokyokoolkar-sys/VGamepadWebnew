@@ -42,7 +42,8 @@ export const useGamepadConnection = ({
   const connectRef = useRef<() => Promise<void>>(async () => {});
   const connectingRef = useRef(false);
   const pendingJoyRef = useRef<{ stick: string; x: number; y: number } | null>(null);
-  const joyRafRef = useRef<number | null>(null);
+  const lastSentJoyRef = useRef<{ stick: string; x: number; y: number } | null>(null);
+  const joyTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const updateLiveSetting = useCallback((key: string, val: string) => {
     if (connStatus === 'on' && connRef.current?.state === signalR.HubConnectionState.Connected) {
@@ -54,16 +55,7 @@ export const useGamepadConnection = ({
   useEffect(() => { updateLiveSetting('EnableVib', enableVib.toString()); }, [enableVib, updateLiveSetting]);
   useEffect(() => { updateLiveSetting('Sensitivity', sensitivity.toString()); }, [sensitivity, updateLiveSetting]);
 
-  useEffect(() => {
-    return () => {
-      if (joyRafRef.current != null) cancelAnimationFrame(joyRafRef.current);
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      if (pingRef.current) clearInterval(pingRef.current);
-      dcRef.current?.close();
-      pcRef.current?.close();
-      connRef.current?.stop();
-    };
-  }, []);
+
 
   const scheduleReconnect = useCallback(() => {
     if (manualDisconnectRef.current) return;
@@ -76,6 +68,37 @@ export const useGamepadConnection = ({
       reconnectTimerRef.current = null;
       connectRef.current?.();
     }, delay);
+  }, []);
+
+  const flushJoy = useCallback(() => {
+    const p = pendingJoyRef.current;
+    if (!p) return;
+    pendingJoyRef.current = null;
+    const dc = dcRef.current;
+    if (dc?.readyState !== 'open') return;
+    const last = lastSentJoyRef.current;
+    if (last && last.stick === p.stick && last.x === p.x && last.y === p.y) return; // unchanged
+    lastSentJoyRef.current = { stick: p.stick, x: p.x, y: p.y };
+    const buf = new ArrayBuffer(6);
+    const v = new DataView(buf);
+    v.setUint8(0, 0x02);
+    v.setUint8(1, p.stick === 'Left' ? 0 : 1);
+    v.setInt16(2, p.x, true);
+    v.setInt16(4, p.y, true);
+    dc.send(buf);
+  }, []);
+
+  const sendJoystick = useCallback((stick: string, x: number, y: number) => {
+    pendingJoyRef.current = { stick, x, y };
+  }, []);
+
+  const startJoyLoop = useCallback(() => {
+    if (joyTimerRef.current) return;
+    joyTimerRef.current = setInterval(flushJoy, 1000 / 60);
+  }, [flushJoy]);
+
+  const stopJoyLoop = useCallback(() => {
+    if (joyTimerRef.current) { clearInterval(joyTimerRef.current); joyTimerRef.current = null; }
   }, []);
 
   const connect = useCallback(async () => {
@@ -133,9 +156,11 @@ export const useGamepadConnection = ({
           dcRef.current.send(`Ping:${Date.now()}`);
         }
       }, 2000);
+      startJoyLoop();
     };
     dc.onclose = () => {
       console.log('[WebRTC] Data Channel closed');
+      stopJoyLoop();
       if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
       setLatency(null);
       setControllerId(null);
@@ -212,14 +237,14 @@ export const useGamepadConnection = ({
     } finally {
       connectingRef.current = false;
     }
-  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError, clientIdRef]);
+  }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError, clientIdRef, startJoyLoop, stopJoyLoop]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
   const disconnect = async () => {
     connectingRef.current = false;
     manualDisconnectRef.current = true;
-    if (joyRafRef.current != null) { cancelAnimationFrame(joyRafRef.current); joyRafRef.current = null; }
+    stopJoyLoop();
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
     setLatency(null);
@@ -239,28 +264,20 @@ export const useGamepadConnection = ({
 
   // Batch joystick updates to one frame to reduce packet rate.
 
-  const flushJoy = useCallback(() => {
-    joyRafRef.current = null;
-    const p = pendingJoyRef.current;
-    pendingJoyRef.current = null;
-    const dc = dcRef.current;
-    if (!p || dc?.readyState !== 'open') return;
-    // Binary protocol: [0x02][stick: 0=Left,1=Right][x int16 LE][y int16 LE]
-    const buf = new ArrayBuffer(6);
-    const v = new DataView(buf);
-    v.setUint8(0, 0x02);
-    v.setUint8(1, p.stick === 'Left' ? 0 : 1);
-    v.setInt16(2, p.x, true);
-    v.setInt16(4, p.y, true);
-    dc.send(buf);
-  }, []);
 
-  const sendJoystick = useCallback((stick: string, x: number, y: number) => {
-    pendingJoyRef.current = { stick, x, y };
-    if (joyRafRef.current == null) {
-      joyRafRef.current = requestAnimationFrame(flushJoy);
-    }
-  }, [flushJoy]);
+
+  useEffect(() => { connectRef.current = connect; }, [connect]);
+
+  useEffect(() => {
+    return () => {
+      stopJoyLoop();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      if (pingRef.current) clearInterval(pingRef.current);
+      dcRef.current?.close();
+      pcRef.current?.close();
+      connRef.current?.stop();
+    };
+  }, [stopJoyLoop]);
 
   return { connStatus, latency, controllerId, connect, disconnect, sendButton, sendJoystick };
 };
