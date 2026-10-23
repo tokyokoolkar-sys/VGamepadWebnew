@@ -18,6 +18,13 @@ namespace VGamepadWeb.Core
         {
             _gamepadManager = gamepadManager;
             _gamepadManager.OnVibrationReceived += HandleVibrationFromGame;
+            _gamepadManager.OnControllerIdAssigned += (connectionId, controllerId) =>
+            {
+                if (_dataChannels.TryGetValue(connectionId, out var dc) && dc.readyState == RTCDataChannelState.open)
+                {
+                    dc.send($"ID:{controllerId}");
+                }
+            };
         }
 
         private void HandleVibrationFromGame(string connectionId, byte largeMotor, byte smallMotor)
@@ -72,22 +79,41 @@ namespace VGamepadWeb.Core
 
         private void ProcessFastMessage(string connectionId, string message, RTCDataChannel dc)
         {
+            if (string.IsNullOrWhiteSpace(message)) return;
+
             var parts = message.Split(':');
             if (parts.Length == 0) return;
 
-            if (parts[0] == "Ping")
+            try
             {
-                dc.send($"Pong:{parts[1]}");
-                return;
-            }
+                if (parts[0] == "Ping")
+                {
+                    if (parts.Length >= 2) dc.send($"Pong:{parts[1]}");
+                    return;
+                }
 
-            if (parts[0] == "B") // الأزرار (بما فيها ضغطة الـ Touchpad كزر عادي)
-            {
-                _gamepadManager.OnButtonReceive(connectionId, parts[1], parts[2] == "1");
+                if (parts[0] == "B" && parts.Length >= 3) // Button press/release
+                {
+                    var buttonName = parts[1];
+                    if (!string.IsNullOrWhiteSpace(buttonName))
+                    {
+                        _gamepadManager.OnButtonReceive(connectionId, buttonName, parts[2] == "1");
+                    }
+                }
+                else if (parts[0] == "J" && parts.Length >= 4) // Joystick move
+                {
+                    var stickName = parts[1];
+                    if (!string.IsNullOrWhiteSpace(stickName)
+                        && short.TryParse(parts[2], out var x)
+                        && short.TryParse(parts[3], out var y))
+                    {
+                        _gamepadManager.OnJoystickMove(connectionId, stickName, x, y);
+                    }
+                }
             }
-            else if (parts[0] == "J") // عصا التحكم
+            catch (Exception ex)
             {
-                _gamepadManager.OnJoystickMove(connectionId, parts[1], short.Parse(parts[2]), short.Parse(parts[3]));
+                Console.WriteLine($"[WebRTC] Failed to process message '{message}': {ex.Message}");
             }
         }
 

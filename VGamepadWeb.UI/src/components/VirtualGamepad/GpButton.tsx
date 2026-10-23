@@ -12,8 +12,10 @@ export const GpButton: React.FC<{
   showHitboxes: boolean;
 }> = ({ id, cfg, pos, editMode, active, isSelected, canvasRef, onDrag, onPress, onRelease, onSelect, showHitboxes }) => {
   const dragRef = useRef<{ tid: number; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
-  const onDragRef = useRef(onDrag); onDragRef.current = onDrag;
-  const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
+  const onDragRef = useRef(onDrag);
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onDragRef.current = onDrag; }, [onDrag]);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
   const effectiveW = pos.w ?? cfg.w;
   const effectiveH = pos.h ?? cfg.h;
@@ -90,12 +92,32 @@ export const GpButton: React.FC<{
   const onMouseUp = () => { if (!editMode) onRelease(); };
   const onMouseLeave = () => { if (!editMode && active) onRelease(); };
 
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (editMode) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      if (!active) { onPress(); }
+    }
+  };
+  const onKeyUp = (e: React.KeyboardEvent) => {
+    if (editMode) return;
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      onRelease();
+    }
+  };
+
   return (
     <div
       className={`gp-ctrl ${editMode ? 'edit' : ''} ${isSelected ? 'selected' : ''}`}
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
-      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}
+      role="button"
+      tabIndex={editMode ? -1 : 0}
+      aria-pressed={active}
+      aria-label={id}
+      onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
       onMouseDown={onMouseDown} onMouseUp={onMouseUp} onMouseLeave={onMouseLeave}
+      onKeyDown={onKeyDown} onKeyUp={onKeyUp}
       onContextMenu={e => e.preventDefault()}
     >
       <div

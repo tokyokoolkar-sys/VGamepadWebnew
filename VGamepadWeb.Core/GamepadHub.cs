@@ -25,6 +25,22 @@ namespace VGamepadWeb.Core
         // تحديث مهم: التحقق من كلمة المرور الاستاتيكية المركزية قبل بدء اتصال الـ WebRTC
         public async Task SendOffer(string sdpOffer, int controllerType, bool enableVib, int sensitivity, string clientPassword = "")
         {
+            // Validate controller type to avoid invalid casts.
+            if (controllerType < 0 || controllerType > 1)
+            {
+                await Clients.Caller.SendAsync("AuthFailed", "Invalid controller type.");
+                Context.Abort();
+                return;
+            }
+
+            // Validate SDP offer payload.
+            if (string.IsNullOrWhiteSpace(sdpOffer))
+            {
+                await Clients.Caller.SendAsync("AuthFailed", "Missing SDP offer.");
+                Context.Abort();
+                return;
+            }
+
             // التحقق من تطابق كلمة المرور القادمة من الهاتف مع كلمة مرور السيرفر
             if (_serverPassword == "" || clientPassword == _serverPassword)
             {

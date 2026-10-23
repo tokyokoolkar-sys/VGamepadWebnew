@@ -15,10 +15,14 @@ export const GpJoystick: React.FC<{
   const stickTouch = useRef<number | null>(null);
   const dragTouch = useRef<{ tid: number; sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
 
-  const onMoveRef = useRef(onMove); onMoveRef.current = onMove;
-  const onDragRef = useRef(onDrag); onDragRef.current = onDrag;
-  const editRef = useRef(editMode); editRef.current = editMode;
-  const onSelectRef = useRef(onSelect); onSelectRef.current = onSelect;
+  const onMoveRef = useRef(onMove);
+  const onDragRef = useRef(onDrag);
+  const editRef = useRef(editMode);
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
+  useEffect(() => { onDragRef.current = onDrag; }, [onDrag]);
+  useEffect(() => { editRef.current = editMode; }, [editMode]);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
   const joySize = pos.w ?? 120;
   const knobSize = Math.round(joySize * 0.4);
@@ -143,6 +147,13 @@ export const GpJoystick: React.FC<{
         className={`gp-joy ${showHitboxes ? 'show-hitbox' : ''}`}
         style={{ width: joySize, height: joySize }}
         onTouchStart={onTouchStart}
+        onTouchCancel={() => {
+          if (!editRef.current && stickTouch.current !== null) {
+            stickTouch.current = null;
+            setKnob({ x: 0, y: 0 });
+            onMoveRef.current(0, 0);
+          }
+        }}
         onMouseDown={onMouseDown}
         onContextMenu={e => e.preventDefault()}
       >
