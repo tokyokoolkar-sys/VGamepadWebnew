@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ThemeType, Profile } from './types';
 import { useLanguage } from './LanguageContext';
+import { QRCodeImage } from './QRCode';
 
 interface SettingsModalProps {
   settingsOpen: boolean;
@@ -137,6 +138,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             />
           </>
         )}
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+          <QRCodeImage value={serverUrl || window.location.origin} />
+        </div>
         <div className="gp-modal-btns">
           {connStatus === 'on' ? (
             <button className="gp-mbtn red" onClick={disconnect}>{t.disconnect}</button>
