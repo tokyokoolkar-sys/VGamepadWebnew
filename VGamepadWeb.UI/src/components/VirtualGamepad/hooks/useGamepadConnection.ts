@@ -141,6 +141,7 @@ export const useGamepadConnection = ({
         console.log('[WebRTC] Connection state:', pc.connectionState);
         setConnStatus('off');
         setLatency(null);
+        scheduleReconnect();
       }
     };
 
