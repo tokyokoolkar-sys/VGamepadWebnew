@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import type { GamepadLayout, ThemeType } from './types';
+import type { GamepadLayout, ThemeType, BtnCfg } from './types';
 import { LAYOUT_KEY, URL_KEY, DEFAULT_LAYOUT, THEMES, BTN_IDS, STICK_IDS } from './constants';
 import { loadLayout, clamp } from './utils';
 import { GpButton } from './GpButton';
@@ -177,6 +177,20 @@ const VirtualGamepadInner: React.FC = () => {
     setLayout(prev => ({ ...prev, controls: { ...prev.controls, [id]: { ...prev.controls[id], x, y } } }));
   }, []);
 
+  const updateLabel = useCallback((id: string, label: string) => {
+    setLayout(prev => ({ ...prev, controls: { ...prev.controls, [id]: { ...prev.controls[id], label } } }));
+  }, []);
+
+  const updateColor = useCallback((id: string, color: string) => {
+    setLayout(prev => ({ ...prev, controls: { ...prev.controls, [id]: { ...prev.controls[id], color } } }));
+  }, []);
+
+  const addCustomButton = useCallback(() => {
+    const id = 'C' + Date.now();
+    setLayout(prev => ({ ...prev, controls: { ...prev.controls, [id]: { x: 50, y: 50, w: 56, h: 56, round: true, hidden: false, label: 'B', color: '#64748b' } } }));
+    setSelectedControl(id);
+  }, []);
+
   const updateSize = useCallback((id: string, delta: number) => {
     setLayout(prev => {
       const ctrl = prev.controls[id] || { x: 50, y: 50 };
@@ -221,8 +235,13 @@ const VirtualGamepadInner: React.FC = () => {
   }, []);
 
   const resetControl = useCallback((id: string) => {
+    const isDefault = BTN_IDS.includes(id) || (STICK_IDS as readonly string[]).includes(id);
     setLayout(prev => {
       const newControls = { ...prev.controls };
+      if (!isDefault) {
+        delete newControls[id];
+        return { ...prev, controls: newControls };
+      }
       const defaultPos = DEFAULT_LAYOUT.controls[id];
       if (defaultPos) {
         newControls[id] = { ...defaultPos };
@@ -231,6 +250,7 @@ const VirtualGamepadInner: React.FC = () => {
       }
       return { ...prev, controls: newControls };
     });
+    if (!isDefault) setSelectedControl(null);
   }, []);
 
   const toggleVisibility = useCallback((id: string) => {
@@ -299,12 +319,16 @@ const VirtualGamepadInner: React.FC = () => {
           if (visibilityMenuOpen) setVisibilityMenuOpen(false);
         }}
       >
-        {BTN_IDS.map(id => {
+        {[...new Set([...BTN_IDS, ...Object.keys(layout.controls)])].filter(id => !(STICK_IDS as readonly string[]).includes(id)).map(id => {
           const pos = layout.controls[id] || DEFAULT_LAYOUT.controls[id] || { x: 50, y: 50 };
           if (pos.hidden) return null;
+          const themeCfg = THEMES[theme][id];
+          const cfg: BtnCfg = pos.label || pos.color
+            ? { label: pos.label ?? themeCfg?.label ?? id, color: pos.color ?? themeCfg?.color ?? '#64748b', w: pos.w ?? themeCfg?.w ?? 56, h: pos.h ?? themeCfg?.h ?? 56, round: pos.round ?? themeCfg?.round ?? true }
+            : (themeCfg ?? { label: id, color: '#64748b', w: 56, h: 56, round: true });
           return (
             <GpButton
-              key={id} id={id} cfg={THEMES[theme][id]}
+              key={id} id={id} cfg={cfg}
               pos={pos}
               editMode={editMode}
               active={activeButtons.has(id)}
@@ -348,6 +372,7 @@ const VirtualGamepadInner: React.FC = () => {
           editMode={editMode} selectedControl={selectedControl} layout={layout} theme={theme}
           updateSize={updateSize} setSize={setSize} setShape={setShape} nudgePos={nudgePos}
           resetControl={resetControl} setSelectedControl={setSelectedControl}
+          updateLabel={updateLabel} updateColor={updateColor} onAddButton={addCustomButton}
         />
       </div>
 

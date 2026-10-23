@@ -14,10 +14,14 @@ interface EditBarProps {
   nudgePos: (id: string, dx: number, dy: number) => void;
   resetControl: (id: string) => void;
   setSelectedControl: (id: string | null) => void;
+  updateLabel?: (id: string, label: string) => void;
+  updateColor?: (id: string, color: string) => void;
+  onAddButton?: () => void;
 }
 
 export const EditBar: React.FC<EditBarProps> = ({
-  editMode, selectedControl, layout, theme, updateSize, setSize, setShape, nudgePos, resetControl, setSelectedControl
+  editMode, selectedControl, layout, theme, updateSize, setSize, setShape, nudgePos, resetControl, setSelectedControl,
+  updateLabel, updateColor, onAddButton
 }) => {
   const { t } = useLanguage();
 
@@ -32,10 +36,12 @@ export const EditBar: React.FC<EditBarProps> = ({
   };
 
   const getSelectedRound = () => {
-    if (!selectedControl || !THEMES[theme][selectedControl]) return false;
+    if (!selectedControl || !THEMES[theme][selectedControl]) return true;
     const ctrl = layout.controls[selectedControl];
     return ctrl?.round ?? THEMES[theme][selectedControl]?.round ?? true;
   };
+
+  const isCustom = !!selectedControl && !THEMES[theme][selectedControl] && !(STICK_IDS as readonly string[]).includes(selectedControl);
 
   return (
     <div className="gp-edit-bar">
@@ -92,6 +98,32 @@ export const EditBar: React.FC<EditBarProps> = ({
               </div>
             )}
 
+            {/* Custom button label/color (only for custom buttons) */}
+            {isCustom && (
+              <>
+                <div className="gp-edit-section">
+                  <span className="gp-edit-label">Label</span>
+                  <input
+                    type="text"
+                    className="gp-input"
+                    value={layout.controls[selectedControl!]?.label ?? ''}
+                    onChange={e => updateLabel?.(selectedControl!, e.target.value)}
+                    maxLength={4}
+                    style={{ marginBottom: '8px' }}
+                  />
+                </div>
+                <div className="gp-edit-section">
+                  <span className="gp-edit-label">Color</span>
+                  <input
+                    type="color"
+                    value={layout.controls[selectedControl!]?.color ?? '#64748b'}
+                    onChange={e => updateColor?.(selectedControl!, e.target.value)}
+                    style={{ width: '100%', height: '32px', marginBottom: '8px' }}
+                  />
+                </div>
+              </>
+            )}
+
             {/* Fine Nudge Control Row */}
             <div className="gp-edit-section">
               <span className="gp-edit-label">{t.position}</span>
@@ -120,6 +152,11 @@ export const EditBar: React.FC<EditBarProps> = ({
         <div className="gp-edit-hint">
           <span className="gp-edit-hint-pulse"></span>
           <span className="gp-edit-hint-text">{t.editHint}</span>
+          {onAddButton && (
+            <button className="gp-mbtn green" onClick={onAddButton} style={{ marginTop: '8px' }}>
+              + Add Button
+            </button>
+          )}
         </div>
       )}
     </div>
