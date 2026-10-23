@@ -29,6 +29,7 @@ export const useGamepadConnection = ({
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const connectRef = useRef<() => Promise<void>>(async () => {});
+  const connectingRef = useRef(false);
   const pendingJoyRef = useRef<{ stick: string; x: number; y: number } | null>(null);
   const joyRafRef = useRef<number | null>(null);
 
@@ -55,6 +56,7 @@ export const useGamepadConnection = ({
 
   const scheduleReconnect = useCallback(() => {
     if (manualDisconnectRef.current) return;
+    if (connectingRef.current) return;
     if (reconnectTimerRef.current) return;
     if (reconnectAttemptsRef.current >= 3) return;
     reconnectAttemptsRef.current += 1;
@@ -66,13 +68,20 @@ export const useGamepadConnection = ({
   }, []);
 
   const connect = useCallback(async () => {
+    if (connectingRef.current) return;
+    connectingRef.current = true;
     manualDisconnectRef.current = false;
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
     reconnectAttemptsRef.current = 0;
     if (pingRef.current) { clearInterval(pingRef.current); pingRef.current = null; }
-    if (dcRef.current) { dcRef.current.close(); dcRef.current = null; }
-    if (pcRef.current) { pcRef.current.close(); pcRef.current = null; }
-    if (connRef.current) { await connRef.current.stop(); connRef.current = null; }
+    try { dcRef.current?.close(); } catch { /* ignore */ }
+    dcRef.current = null;
+    try { pcRef.current?.close(); } catch { /* ignore */ }
+    pcRef.current = null;
+    if (connRef.current) {
+      try { await connRef.current.stop(); } catch { /* ignore */ }
+      connRef.current = null;
+    }
     setConnStatus('ing');
     setLatency(null);
     setControllerId(null);
@@ -180,12 +189,15 @@ export const useGamepadConnection = ({
       if (!authFailedRef.current) {
         notifyError('Connection failed: ' + err);
       }
+    } finally {
+      connectingRef.current = false;
     }
   }, [serverUrl, serverPassword, controllerType, enableVib, sensitivity, scheduleReconnect, notifyError]);
 
   useEffect(() => { connectRef.current = connect; }, [connect]);
 
   const disconnect = async () => {
+    connectingRef.current = false;
     manualDisconnectRef.current = true;
     if (joyRafRef.current != null) { cancelAnimationFrame(joyRafRef.current); joyRafRef.current = null; }
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
